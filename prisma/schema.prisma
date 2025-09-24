@@ -1,0 +1,37 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Report {
+  id         String   @id
+  userId     String
+  username   String
+  question   String   @db.LongText  
+  status     ReportStatus @default(OPEN)
+  assignedTo String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt @default(now())
+
+  messages   Message[]
+}
+
+model Message {
+  id        Int      @id @default(autoincrement())
+  reportId  String
+  sender    String 
+  content   String   @db.LongText 
+  createdAt DateTime @default(now())
+
+  report    Report   @relation(fields: [reportId], references: [id])
+}
+
+enum ReportStatus {
+  OPEN
+  IN_PROGRESS
+  CLOSED
+}
