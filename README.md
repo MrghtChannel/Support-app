@@ -30,7 +30,7 @@
 - [Node.js](https://nodejs.org/)
 - [Telegraf](https://telegraf.js.org/) 
 - [Prisma](https://www.prisma.io/) 
-
+- [Discord.js](https://discord.js.org/)
 ---
 
 ## 🚀 Установка та запуск
