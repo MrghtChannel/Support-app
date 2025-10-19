@@ -121,6 +121,38 @@ export function handleCommands(client, telegramBot) {
       }
     }
 
+    if (message.content.startsWith("/help") || message.content.startsWith("/допомога")) {
+      try {
+        const member = await message.guild.members.fetch(message.author.id);
+        const isAdmin = member.roles.cache.has(process.env.DISCORD_ADMIN_ROLE);
+        const isHeadAdmin = member.roles.cache.has(process.env.DISCORD_HEADADMIN_ROLE);
+
+        let helpMessage = "📋 **Список доступних команд:**\n\n";
+
+        if (isAdmin) {
+          helpMessage += "🛡️ **Команди для адміністраторів:**\n";
+          helpMessage += "• `/бан <telegram_id> <причина> [тривалість_у_годинах]` - Забанити користувача\n";
+          helpMessage += "• `/розбан <telegram_id>` - Зняти бан з користувача\n";
+          helpMessage += "• `/перевірити_бан <telegram_id>` - Перевірити статус бану\n";
+          helpMessage += "• `/відповідь <id> <текст>` - Відповісти на репорт\n";
+        }
+
+        if (isHeadAdmin) {
+          helpMessage += "\n👑 **Команди для головних адміністраторів:**\n";
+          helpMessage += "• `/перегляд <id>` - Переглянути переписку репорту\n";
+        }
+
+        if (!isAdmin && !isHeadAdmin) {
+          helpMessage += "⚠️ У вас немає прав для виконання команд. Зверніться до адміністратора.\n";
+        }
+
+        await message.reply(helpMessage);
+      } catch (error) {
+        console.error("Помилка при виконанні команди /help або /допомога:", error);
+        await message.reply("❌ Сталася помилка при відображенні довідки.");
+      }
+    }
+
     if (message.content.startsWith("/відповідь")) {
       const args = message.content.split(" ");
       if (args.length < 3) {

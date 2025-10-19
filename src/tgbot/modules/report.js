@@ -8,14 +8,12 @@ const prisma = new PrismaClient();
 export async function handleCreateReportAction(ctx) {
   try {
     const userId = ctx.from.id.toString();
-
-    // 🔹 Перевірка, чи користувач заблокований
     const activeBan = await prisma.ban.findFirst({
       where: {
         userId,
         OR: [
-          { expiresAt: null }, // безстроковий бан
-          { expiresAt: { gt: new Date() } }, // ще не закінчився
+          { expiresAt: null }, 
+          { expiresAt: { gt: new Date() } }, 
         ],
       },
       orderBy: { bannedAt: "desc" },
@@ -32,7 +30,6 @@ export async function handleCreateReportAction(ctx) {
       );
     }
 
-    // 🔹 Перевірка на активний репорт
     const existingReport = await prisma.report.findFirst({
       where: {
         userId,
@@ -46,7 +43,6 @@ export async function handleCreateReportAction(ctx) {
       );
     }
 
-    // 🔹 Перевірка на паузу (cooldown)
     const lastPause = await prisma.pause.findFirst({
       where: { userId },
       orderBy: { pausedAt: "desc" },
@@ -54,7 +50,7 @@ export async function handleCreateReportAction(ctx) {
 
     if (lastPause) {
       const now = new Date();
-      const pauseDuration = 30 * 60 * 1000; // 30 хвилин
+      const pauseDuration = 30 * 60 * 1000; 
       const timeSincePause = now - new Date(lastPause.pausedAt);
       const timeLeft = pauseDuration - timeSincePause;
 
@@ -83,7 +79,6 @@ export async function handleTextMessage(ctx) {
       return ctx.reply("⚠️ Повідомлення занадто довге! Максимум 500 символів.");
     }
 
-    // 🔹 Перевірка бану перед створенням або надсиланням повідомлення
     const activeBan = await prisma.ban.findFirst({
       where: {
         userId,
