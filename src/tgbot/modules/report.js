@@ -7,17 +7,63 @@ const prisma = new PrismaClient();
 
 export async function handleCreateReportAction(ctx) {
   try {
-    const existing = await prisma.report.findFirst({
+    const userId = ctx.from.id.toString();
+
+    // 🔹 Перевірка, чи користувач заблокований
+    const activeBan = await prisma.ban.findFirst({
       where: {
-        userId: ctx.from.id.toString(),
+        userId,
+        OR: [
+          { expiresAt: null }, // безстроковий бан
+          { expiresAt: { gt: new Date() } }, // ще не закінчився
+        ],
+      },
+      orderBy: { bannedAt: "desc" },
+    });
+
+    if (activeBan) {
+      const reasonText = activeBan.reason ? `\nПричина: ${activeBan.reason}` : "";
+      const expiresText = activeBan.expiresAt
+        ? `\n⏳ Бан діє до: ${activeBan.expiresAt.toLocaleString()}`
+        : "\n⛔ Бан безстроковий.";
+
+      return ctx.reply(
+        `🚫 Ви не можете створити репорт, оскільки маєте активний бан.${reasonText}${expiresText}`
+      );
+    }
+
+    // 🔹 Перевірка на активний репорт
+    const existingReport = await prisma.report.findFirst({
+      where: {
+        userId,
         status: { in: ["OPEN", "IN_PROGRESS"] },
       },
     });
 
-    if (existing) {
+    if (existingReport) {
       return ctx.reply(
-        `⚠️ У вас вже є активний репорт #${existing.id}. Дочекайтесь завершення.`
+        `⚠️ У вас вже є активний репорт #${existingReport.id}. Дочекайтесь завершення.`
       );
+    }
+
+    // 🔹 Перевірка на паузу (cooldown)
+    const lastPause = await prisma.pause.findFirst({
+      where: { userId },
+      orderBy: { pausedAt: "desc" },
+    });
+
+    if (lastPause) {
+      const now = new Date();
+      const pauseDuration = 30 * 60 * 1000; // 30 хвилин
+      const timeSincePause = now - new Date(lastPause.pausedAt);
+      const timeLeft = pauseDuration - timeSincePause;
+
+      if (timeSincePause < pauseDuration) {
+        const minutesLeft = Math.ceil(timeLeft / 1000 / 60);
+        return ctx.reply(
+          `⏳ Ви зможете створити новий репорт через ${minutesLeft} хвилин.`
+        );
+      }
     }
 
     await ctx.reply("Будь ласка, опишіть вашу проблему (максимум 500 символів):");
@@ -31,20 +77,47 @@ export async function handleCreateReportAction(ctx) {
 export async function handleTextMessage(ctx) {
   try {
     const text = ctx.message.text;
+    const userId = ctx.from.id.toString();
+
     if (text.length > 500) {
       return ctx.reply("⚠️ Повідомлення занадто довге! Максимум 500 символів.");
+    }
+
+    // 🔹 Перевірка бану перед створенням або надсиланням повідомлення
+    const activeBan = await prisma.ban.findFirst({
+      where: {
+        userId,
+        OR: [
+          { expiresAt: null },
+          { expiresAt: { gt: new Date() } },
+        ],
+      },
+    });
+
+    if (activeBan) {
+      return ctx.reply("🚫 Ви не можете писати повідомлення, поки у вас активний бан.");
     }
 
     if (ctx.session?.waitingForReport) {
       const report = await prisma.report.create({
         data: {
           id: generateUniqueId(),
-          userId: ctx.from.id.toString(),
+          userId,
           username: ctx.from.username || "Анонім",
           question: text,
           status: "OPEN",
         },
       });
+
+      await prisma.pause.create({
+        data: {
+          userId,
+          reason: "Report creation cooldown",
+          pausedAt: new Date(),
+          expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+        },
+      });
+
       await prisma.message.create({
         data: {
           reportId: report.id,
@@ -62,22 +135,24 @@ export async function handleTextMessage(ctx) {
     } else {
       const report = await prisma.report.findFirst({
         where: {
-          userId: ctx.from.id.toString(),
+          userId,
           status: { in: ["OPEN", "IN_PROGRESS"] },
         },
       });
 
       if (report) {
-        const guild = global.discordClient.guilds.cache.first();
+        const guild = global.discordClient?.guilds?.cache?.first();
         if (!guild) return;
 
         const channel = guild.channels.cache.find(
           (ch) => ch.name === `report-${report.id}`
         );
+
         if (channel) {
           await channel.send(
             `💬 Нове повідомлення від ${ctx.from.username || "Анонім"} (TG: ${ctx.from.id}):\n${text}`
           );
+
           await prisma.message.create({
             data: {
               reportId: report.id,

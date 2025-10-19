@@ -35,3 +35,19 @@ enum ReportStatus {
   IN_PROGRESS
   CLOSED
 }
+
+model Ban {
+  id        Int      @id @default(autoincrement())
+  userId    String
+  reason    String   @db.LongText 
+  bannedAt  DateTime @default(now())
+  expiresAt DateTime?
+}
+
+model Pause {
+  id        Int      @id @default(autoincrement())
+  userId    String
+  reason    String   @db.LongText 
+  pausedAt  DateTime @default(now())
+  expiresAt DateTime?
+}

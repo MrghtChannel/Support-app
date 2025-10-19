@@ -5,6 +5,122 @@ const prisma = new PrismaClient();
 export function handleCommands(client, telegramBot) {
   client.on("messageCreate", async (message) => {
     if (message.author.bot) return;
+
+    if (message.content.startsWith("/бан")) {
+      const args = message.content.split(" ");
+      if (args.length < 3) {
+        return message.reply("❌ Використання: /бан <telegram_id> <причина> [тривалість_у_годинах]");
+      }
+
+      const telegramId = args[1];
+      const reason = args.slice(2, args.length - 1).join(" ");
+      const durationHours = args.length > 3 ? parseInt(args[args.length - 1]) : null;
+
+      try {
+        const member = await message.guild.members.fetch(message.author.id);
+        const isAdmin = member.roles.cache.has(process.env.DISCORD_ADMIN_ROLE);
+        if (!isAdmin) {
+          return message.reply("❌ У вас немає прав адміністратора для виконання цієї команди.");
+        }
+
+        const banData = {
+          userId: telegramId,
+          reason,
+          bannedAt: new Date(),
+          expiresAt: durationHours ? new Date(Date.now() + durationHours * 60 * 60 * 1000) : null,
+        };
+
+        await prisma.ban.create({ data: banData });
+
+        await telegramBot.telegram.sendMessage(
+          telegramId,
+          `🚫 Ви отримали бан!\nПричина: ${reason}\n${durationHours ? `Тривалість: ${durationHours} годин` : "Тривалість: безстроково"}`
+        );
+
+        await message.reply(`✅ Користувача ${telegramId} забанено. Причина: ${reason}${durationHours ? ` на ${durationHours} годин` : ""}`);
+      } catch (error) {
+        console.error("Помилка при бануванні:", error);
+        await message.reply("❌ Сталася помилка при виконанні бану.");
+      }
+    }
+
+    if (message.content.startsWith("/розбан")) {
+      const args = message.content.split(" ");
+      if (args.length < 2) {
+        return message.reply("❌ Використання: /розбан <telegram_id>");
+      }
+
+      const telegramId = args[1];
+
+      try {
+        const member = await message.guild.members.fetch(message.author.id);
+        const isAdmin = member.roles.cache.has(process.env.DISCORD_ADMIN_ROLE);
+        if (!isAdmin) {
+          return message.reply("❌ У вас немає прав адміністратора для виконання цієї команди.");
+        }
+
+        const ban = await prisma.ban.findFirst({
+          where: { userId: telegramId },
+          orderBy: { bannedAt: "desc" },
+        });
+
+        if (!ban) {
+          return message.reply("❌ Бан для цього користувача не знайдено.");
+        }
+
+        await prisma.ban.delete({
+          where: { id: ban.id },
+        });
+
+        await telegramBot.telegram.sendMessage(
+          telegramId,
+          `✅ Ваш бан знято!`
+        );
+
+        await message.reply(`✅ Бан з користувача ${telegramId} знято.`);
+      } catch (error) {
+        console.error("Помилка при розбануванні:", error);
+        await message.reply("❌ Сталася помилка при знятті бану.");
+      }
+    }
+
+    if (message.content.startsWith("/перевірити_бан")) {
+      const args = message.content.split(" ");
+      if (args.length < 2) {
+        return message.reply("❌ Використання: /перевірити_бан <telegram_id>");
+      }
+
+      const telegramId = args[1];
+
+      try {
+        const member = await message.guild.members.fetch(message.author.id);
+        const isAdmin = member.roles.cache.has(process.env.DISCORD_ADMIN_ROLE);
+        if (!isAdmin) {
+          return message.reply("❌ У вас немає прав адміністратора для виконання цієї команди.");
+        }
+
+        const ban = await prisma.ban.findFirst({
+          where: { userId: telegramId },
+          orderBy: { bannedAt: "desc" },
+        });
+
+        if (!ban) {
+          return message.reply(`✅ Користувач ${telegramId} не забанений.`);
+        }
+
+        const expiresAt = ban.expiresAt ? new Date(ban.expiresAt).toLocaleString() : "безстроково";
+        await message.reply(
+          `📋 Статус бану для ${telegramId}:\n` +
+          `Причина: ${ban.reason}\n` +
+          `Дата бану: ${new Date(ban.bannedAt).toLocaleString()}\n` +
+          `Тривалість: ${expiresAt}`
+        );
+      } catch (error) {
+        console.error("Помилка при перевірці бану:", error);
+        await message.reply("❌ Сталася помилка при перевірці бану.");
+      }
+    }
+
     if (message.content.startsWith("/відповідь")) {
       const args = message.content.split(" ");
       if (args.length < 3) {
@@ -54,6 +170,7 @@ export function handleCommands(client, telegramBot) {
         await message.reply("❌ Сталася помилка при відправці відповіді.");
       }
     }
+
     if (message.content.startsWith("/перегляд")) {
       const args = message.content.split(" ");
       if (args.length < 2) {
@@ -71,7 +188,7 @@ export function handleCommands(client, telegramBot) {
         }
         const report = await prisma.report.findUnique({
           where: { id: reportId },
-          include: { messages: { orderBy: { createdAt: "asc" } } }, 
+          include: { messages: { orderBy: { createdAt: "asc" } } },
         });
 
         if (!report) {

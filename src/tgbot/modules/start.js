@@ -6,7 +6,6 @@ export function handleStartCommand(ctx) {
     Markup.inlineKeyboard([
       [
         Markup.button.callback("📝 Створити репорт", "create_report"),
-        Markup.button.url("📖 Правила", "http://localhost:3000/rules")
       ]
     ])
   );
